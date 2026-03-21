@@ -225,6 +225,10 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
       const hDist = nearRay.horizonDist ?? 0;
       const hy = elevToY(hAngle);
 
+      // Compute terrain elevation at the horizon point
+      const obsElev = viewshedResult.obsElev ?? 0;
+      const horizonElevM = Math.round(obsElev + hDist * 1000 * Math.tan(hAngle * Math.PI / 180));
+
       // Position label to avoid left/right edges
       const onRight = x < padL + plotW * 0.62;
       const lx = onRight ? x + 5 : x - 5;
@@ -233,7 +237,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
 
       ctx.fillStyle = ACCENT;
       ctx.font = 'bold 10px monospace';
-      ctx.fillText(`${hAngle.toFixed(1)}°`, lx, ly);
+      ctx.fillText(`${horizonElevM.toLocaleString()} m`, lx, ly);
 
       ctx.fillStyle = LABEL_COLOR;
       ctx.font = '9px monospace';
@@ -422,9 +426,9 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
         <input
           type="range"
           orient="vertical"
-          min={1}
+          min={0.2}
           max={10}
-          step={0.5}
+          step={0.1}
           value={zScale}
           onChange={(e) => setZScale(Number(e.target.value))}
           style={{
