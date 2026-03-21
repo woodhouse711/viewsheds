@@ -41,6 +41,7 @@ export default function App() {
   const [obsHeight, setObsHeight] = useState(DEFAULT_OBS_HEIGHT);
   const [showViewshed, setShowViewshed] = useState(true);
   const [showFill, setShowFill] = useState(false);
+  const [showTopo, setShowTopo] = useState(false);
   const [viewshedResult, setViewshedResult] = useState(null);
   const [computing, setComputing] = useState(false);
   const [hoveredAz, setHoveredAz] = useState(null);
@@ -199,6 +200,7 @@ export default function App() {
               viewshedResult={viewshedResult}
               showFill={showFill}
               showViewshed={showViewshed}
+              showTopo={showTopo}
             />
           </div>
 
@@ -236,6 +238,8 @@ export default function App() {
             onShowViewshed={setShowViewshed}
             showFill={showFill}
             onShowFill={setShowFill}
+            showTopo={showTopo}
+            onShowTopo={setShowTopo}
             radius={radius}
             onRadius={(r) => setRadius(r)}
             obsHeight={obsHeight}

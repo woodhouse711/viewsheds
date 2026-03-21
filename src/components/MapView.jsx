@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 const BASEMAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
+const TOPO_LAYER = 'topo-overlay';
 const HORIZON_LAYER = 'viewshed-horizon';
 const ISLAND_LAYER = 'viewshed-islands';
 const FILL_LAYER = 'viewshed-fill';
@@ -85,6 +86,7 @@ export default function MapView({
   viewshedResult,
   showFill,
   showViewshed,
+  showTopo,
   onMapReady,
 }) {
   const containerRef = useRef(null);
@@ -119,6 +121,22 @@ export default function MapView({
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
     map.on('load', () => {
+      // OpenTopoMap overlay — contours + labeled peaks
+      map.addSource('topo-src', {
+        type: 'raster',
+        tiles: ['https://tile.opentopomap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+        maxzoom: 17,
+      });
+      map.addLayer({
+        id: TOPO_LAYER,
+        type: 'raster',
+        source: 'topo-src',
+        layout: { visibility: 'none' },
+        paint: { 'raster-opacity': 0.65 },
+      });
+
       // Viewshed fill
       map.addSource('viewshed-fill-src', {
         type: 'geojson',
@@ -261,7 +279,14 @@ export default function MapView({
     }
   }, [viewshedResult, showViewshed, showFill, observer]);
 
-  // Toggle layer visibility
+  // Toggle topo overlay
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getLayer(TOPO_LAYER)) return;
+    map.setLayoutProperty(TOPO_LAYER, 'visibility', showTopo ? 'visible' : 'none');
+  }, [showTopo]);
+
+  // Toggle viewshed layer visibility
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.getLayer(HORIZON_LAYER)) return;

@@ -64,25 +64,25 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
     const panOffset = panRef.current;
     const azToX = makeAzToX(padL, plotW, panOffset);
 
-    // Elevation range
-    let minElev = Infinity;
+    // Elevation range — anchor 0° (horizon) at 25% from bottom so positive angles
+    // (visible peaks) always occupy 75% of chart height regardless of terrain flatness.
     let maxElev = -Infinity;
     rays.forEach((r) => {
       r.samples.forEach((s) => {
-        if (s.angleDeg < minElev) minElev = s.angleDeg;
         if (s.angleDeg > maxElev) maxElev = s.angleDeg;
       });
     });
-    const elevRange = maxElev - minElev || 1;
-    const elevMin = minElev - elevRange * 0.1;
-    const elevMax = maxElev + elevRange * 0.15;
+    const elevMax = Math.max(maxElev * 1.15, 2); // at least 2° of headroom above
+    // horizonFrac=0.25 → |elevMin| = elevMax/3 → 0° sits 25% from bottom
+    const elevMin = -(elevMax / 3);
 
     const elevToY = (e) => padT + plotH - ((e - elevMin) / (elevMax - elevMin)) * plotH;
 
     // Grid lines — elevation
     ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 1;
-    const elevStep = elevRange > 20 ? 10 : elevRange > 5 ? 5 : 1;
+    const elevSpan = elevMax - elevMin;
+    const elevStep = elevSpan > 20 ? 10 : elevSpan > 5 ? 5 : 1;
     for (
       let e = Math.ceil(elevMin / elevStep) * elevStep;
       e <= elevMax;

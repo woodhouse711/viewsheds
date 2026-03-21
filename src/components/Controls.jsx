@@ -137,6 +137,8 @@ export default function Controls({
   onShowViewshed,
   showFill,
   onShowFill,
+  showTopo,
+  onShowTopo,
   radius,
   onRadius,
   obsHeight,
@@ -154,6 +156,7 @@ export default function Controls({
       <div style={styles.section}>
         <Toggle label="Show viewshed" value={showViewshed} onChange={onShowViewshed} />
         <Toggle label="Show visible fill" value={showFill} onChange={onShowFill} />
+        <Toggle label="Topo / contours" value={showTopo} onChange={onShowTopo} />
       </div>
 
       <div style={styles.divider} />
@@ -161,7 +164,7 @@ export default function Controls({
       <SliderRow
         label="Radius"
         min={2}
-        max={80}
+        max={150}
         step={1}
         value={radius}
         onChange={onRadius}
