@@ -201,15 +201,8 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
     ctx.lineWidth = 1;
     ctx.strokeRect(padL, padT, plotW, plotH);
 
-    // Y-axis label
-    ctx.save();
-    ctx.translate(12, padT + plotH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillStyle = LABEL_COLOR;
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Elevation angle (°)', 0, 0);
-    ctx.restore();
+    // Y-axis label — "Z" slider panel covers x=0–18, so draw label at x=20 area
+    // (omitted: the degree labels and slider itself make the axis self-evident)
 
     // Pan indicator (subtle)
     ctx.fillStyle = 'rgba(70,186,180,0.4)';
@@ -282,32 +275,46 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
   }, [onHoverAz]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: BG }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: BG }}>
       <canvas
         ref={canvasRef}
-        style={{ flex: 1, width: '100%', display: 'block', cursor: 'ew-resize', minHeight: 0 }}
+        style={{ width: '100%', height: '100%', display: 'block', cursor: 'ew-resize' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       />
+      {/* Vertical Z-scale slider — lives in the left padding of the canvas (padL=48) */}
       <div style={{
+        position: 'absolute',
+        left: 2,
+        top: 18,    // aligned with padT=16
+        bottom: 34, // aligned with padB=32
+        width: 18,
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        gap: 8,
-        padding: '4px 10px 5px 48px',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
+        gap: 2,
+        pointerEvents: 'auto',
       }}>
-        <span style={{ color: LABEL_COLOR, fontSize: 10, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-          Z ×{zScale % 1 === 0 ? zScale : zScale.toFixed(1)}
+        <span style={{ color: LABEL_COLOR, fontSize: 8, fontFamily: 'monospace', lineHeight: 1 }}>
+          ×{zScale % 1 === 0 ? zScale : zScale.toFixed(1)}
         </span>
         <input
           type="range"
+          orient="vertical"
           min={1}
           max={10}
           step={0.5}
           value={zScale}
           onChange={(e) => setZScale(Number(e.target.value))}
-          style={{ flex: 1, accentColor: ACCENT, cursor: 'pointer', margin: 0 }}
+          style={{
+            flex: 1,
+            writingMode: 'vertical-lr',
+            direction: 'rtl',
+            accentColor: ACCENT,
+            cursor: 'pointer',
+            width: 16,
+          }}
         />
         <button
           onClick={() => setZScale(1)}
@@ -317,11 +324,11 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
             border: `1px solid ${zScale === 1 ? 'rgba(255,255,255,0.07)' : 'rgba(70,186,180,0.4)'}`,
             color: zScale === 1 ? '#556070' : ACCENT,
             fontFamily: 'monospace',
-            fontSize: 10,
-            padding: '2px 6px',
-            borderRadius: 3,
+            fontSize: 8,
+            padding: '1px 3px',
+            borderRadius: 2,
             cursor: zScale === 1 ? 'default' : 'pointer',
-            whiteSpace: 'nowrap',
+            lineHeight: 1.3,
           }}
         >
           1:1

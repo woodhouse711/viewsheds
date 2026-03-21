@@ -41,6 +41,7 @@ export default function App() {
   const [obsHeight, setObsHeight] = useState(DEFAULT_OBS_HEIGHT);
   const [showViewshed, setShowViewshed] = useState(true);
   const [showFill, setShowFill] = useState(false);
+  const [fillOpacity, setFillOpacity] = useState(0.12); // 12% default
   const [showTopo, setShowTopo] = useState(false);
   const [viewshedResult, setViewshedResult] = useState(null);
   const [computing, setComputing] = useState(false);
@@ -212,6 +213,7 @@ export default function App() {
               onObserverChange={handleObserverChange}
               viewshedResult={viewshedResult}
               showFill={showFill}
+              fillOpacity={fillOpacity}
               showViewshed={showViewshed}
               showTopo={showTopo}
             />
@@ -251,6 +253,8 @@ export default function App() {
             onShowViewshed={setShowViewshed}
             showFill={showFill}
             onShowFill={setShowFill}
+            fillOpacity={fillOpacity}
+            onFillOpacity={setFillOpacity}
             showTopo={showTopo}
             onShowTopo={setShowTopo}
             radius={radius}

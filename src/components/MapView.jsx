@@ -85,6 +85,7 @@ export default function MapView({
   onObserverChange,
   viewshedResult,
   showFill,
+  fillOpacity,
   showViewshed,
   showTopo,
   onMapReady,
@@ -278,6 +279,13 @@ export default function MapView({
       map.getSource('viewshed-fill-src').setData({ type: 'FeatureCollection', features: [] });
     }
   }, [viewshedResult, showViewshed, showFill, observer]);
+
+  // Fill opacity
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getLayer(FILL_LAYER)) return;
+    map.setPaintProperty(FILL_LAYER, 'fill-opacity', fillOpacity);
+  }, [fillOpacity]);
 
   // Toggle topo overlay
   useEffect(() => {

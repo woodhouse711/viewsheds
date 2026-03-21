@@ -137,6 +137,8 @@ export default function Controls({
   onShowViewshed,
   showFill,
   onShowFill,
+  fillOpacity,
+  onFillOpacity,
   showTopo,
   onShowTopo,
   radius,
@@ -156,6 +158,19 @@ export default function Controls({
       <div style={styles.section}>
         <Toggle label="Show viewshed" value={showViewshed} onChange={onShowViewshed} />
         <Toggle label="Show visible fill" value={showFill} onChange={onShowFill} />
+        {showFill && (
+          <div style={{ paddingLeft: 18 }}>
+            <SliderRow
+              label="Fill opacity"
+              min={3}
+              max={60}
+              step={3}
+              value={Math.round(fillOpacity * 100)}
+              onChange={(v) => onFillOpacity(v / 100)}
+              unit="%"
+            />
+          </div>
+        )}
         <Toggle label="Topo / contours" value={showTopo} onChange={onShowTopo} />
       </div>
 
