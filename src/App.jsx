@@ -4,7 +4,7 @@ import PolarDiagram from './components/PolarDiagram';
 import Controls from './components/Controls';
 import { prefetchViewshedTiles } from './lib/terrain';
 
-const DEFAULT_OBSERVER = { lat: 37.9235, lng: -122.5965 };
+const DEFAULT_OBSERVER = { lat: 47.6677, lng: -122.3829 };
 const DEFAULT_RADIUS = 30;
 const DEFAULT_OBS_HEIGHT = 2;
 const NUM_AZIMUTHS = 360;
