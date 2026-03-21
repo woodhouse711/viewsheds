@@ -2,7 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import MapView from './components/MapView';
 import PolarDiagram from './components/PolarDiagram';
 import Controls from './components/Controls';
+import LocationSearch from './components/LocationSearch';
 import { prefetchViewshedTiles } from './lib/terrain';
+import { fetchPeaks } from './lib/peaks';
 
 const DEFAULT_OBSERVER = { lat: 47.6677, lng: -122.3829 };
 const DEFAULT_RADIUS = 30;
@@ -41,7 +43,7 @@ export default function App() {
   const [obsHeight, setObsHeight] = useState(DEFAULT_OBS_HEIGHT);
   const [showViewshed, setShowViewshed] = useState(true);
   const [showFill, setShowFill] = useState(false);
-  const [fillOpacity, setFillOpacity] = useState(0.12); // 12% default
+  const [fillOpacity, setFillOpacity] = useState(0.12);
   const [showTopo, setShowTopo] = useState(false);
   const [viewshedResult, setViewshedResult] = useState(null);
   const [computing, setComputing] = useState(false);
@@ -49,26 +51,27 @@ export default function App() {
   const [diagramHeight, setDiagramHeight] = useState(180);
   const [handleHovered, setHandleHovered] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [peaks, setPeaks] = useState([]);
+  const [exporting, setExporting] = useState(false);
 
   const computeRef = useRef(null);
   const dragRef = useRef(null);
   const pendingRef = useRef(false);
-  const pendingParamsRef = useRef(null); // queued params while a compute is in-flight
+  const pendingParamsRef = useRef(null);
+  const mapRef = useRef(null);
 
-  // Close sidebar when switching to desktop
   useEffect(() => {
     if (!isMobile) setSidebarOpen(false);
   }, [isMobile]);
 
   const runViewshed = useCallback(async (obs, rad, height) => {
     if (pendingRef.current) {
-      // A computation is already running — queue the latest params and bail.
-      // When it finishes it will re-run with these params.
       pendingParamsRef.current = { obs, rad, height };
       return;
     }
     pendingRef.current = true;
     pendingParamsRef.current = null;
+    setPeaks([]);
     setComputing(true);
     try {
       const tiles = await prefetchViewshedTiles(obs.lat, obs.lng, rad);
@@ -87,7 +90,15 @@ export default function App() {
       });
       await new Promise((resolve, reject) => {
         const handler = (e) => {
-          if (e.data.type === 'RESULT') { worker.removeEventListener('message', handler); setViewshedResult(e.data.payload); resolve(); }
+          if (e.data.type === 'RESULT') {
+            worker.removeEventListener('message', handler);
+            setViewshedResult(e.data.payload);
+            // Fetch peaks asynchronously — non-blocking, fails silently
+            fetchPeaks(obs.lat, obs.lng, rad)
+              .then(setPeaks)
+              .catch(() => {});
+            resolve();
+          }
           else if (e.data.type === 'ERROR') { worker.removeEventListener('message', handler); reject(new Error(e.data.payload)); }
         };
         worker.addEventListener('message', handler);
@@ -97,7 +108,6 @@ export default function App() {
     } finally {
       setComputing(false);
       pendingRef.current = false;
-      // If a newer location was requested while we were computing, run it now.
       const queued = pendingParamsRef.current;
       if (queued) {
         pendingParamsRef.current = null;
@@ -133,6 +143,33 @@ export default function App() {
     setObserver(obs);
     if (showViewshed) scheduleCompute(obs, radius, obsHeight);
   }, [showViewshed, radius, obsHeight, scheduleCompute]);
+
+  const handleLocationSelect = useCallback((coords) => {
+    handleObserverChange(coords);
+    mapRef.current?.flyTo({ center: [coords.lng, coords.lat], zoom: 10 });
+  }, [handleObserverChange]);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#080c10',
+        logging: false,
+      });
+      const filename = `viewshed_${observer.lat.toFixed(5)}_${observer.lng.toFixed(5)}.jpg`;
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/jpeg', 0.93);
+      link.click();
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setExporting(false);
+    }
+  }, [observer]);
 
   useEffect(() => {
     if (showViewshed) scheduleCompute(observer, radius, obsHeight);
@@ -175,17 +212,41 @@ export default function App() {
     <div style={{ width: '100vw', height: '100vh', background: '#080c10', display: 'flex', flexDirection: 'column', fontFamily: 'monospace', color: '#d0d4dc', overflow: 'hidden' }}>
 
       {/* Header */}
-      <header style={{ padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(8,12,16,0.95)', zIndex: 10, flexShrink: 0 }}>
-        <span style={{ fontSize: 15, fontWeight: 'bold', color: '#46BAB4', letterSpacing: '0.1em' }}>VIEWSHED</span>
-        {!isMobile && <span style={{ fontSize: 11, color: '#556070' }}>Line-of-sight terrain analysis</span>}
-        <span style={{ fontSize: 11, color: '#556070', marginLeft: 'auto' }}>
+      <header style={{ padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(8,12,16,0.95)', zIndex: 10, flexShrink: 0 }}>
+        <span style={{ fontSize: 14, fontWeight: 'bold', color: '#46BAB4', letterSpacing: '0.1em', flexShrink: 0 }}>VIEWSHED</span>
+
+        {/* Location search */}
+        <LocationSearch onSelect={handleLocationSelect} />
+
+        {/* Coords display */}
+        <span style={{ fontSize: 10, color: '#556070', flexShrink: 0, whiteSpace: 'nowrap' }}>
           {observer.lat.toFixed(4)}°, {observer.lng.toFixed(4)}°
         </span>
+
+        {/* Export button */}
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          title="Save screenshot (lat/lng filename)"
+          style={{
+            background: 'none',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 4,
+            color: exporting ? '#556070' : '#d0d4dc',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            padding: '3px 7px',
+            cursor: exporting ? 'default' : 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          {exporting ? '…' : '⬇ JPG'}
+        </button>
+
         {isMobile && (
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             style={{
-              marginLeft: 8,
               background: sidebarOpen ? 'rgba(70,186,180,0.2)' : 'rgba(255,255,255,0.06)',
               border: '1px solid rgba(70,186,180,0.4)',
               borderRadius: 4,
@@ -194,6 +255,7 @@ export default function App() {
               lineHeight: 1,
               padding: '4px 9px',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
             aria-label="Toggle controls"
           >
@@ -216,6 +278,7 @@ export default function App() {
               fillOpacity={fillOpacity}
               showViewshed={showViewshed}
               showTopo={showTopo}
+              onMapReady={(m) => { mapRef.current = m; }}
             />
           </div>
 
@@ -240,13 +303,15 @@ export default function App() {
           <div style={{ height: isMobile ? 160 : diagramHeight, background: '#080c10', flexShrink: 0, borderTop: isMobile ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
             <PolarDiagram
               viewshedResult={viewshedResult}
+              observer={observer}
+              peaks={peaks}
               hoveredAz={hoveredAz}
               onHoverAz={setHoveredAz}
             />
           </div>
         </div>
 
-        {/* Sidebar — desktop inline, mobile overlay */}
+        {/* Sidebar */}
         <aside style={sidebarStyle}>
           <Controls
             showViewshed={showViewshed}
@@ -266,16 +331,10 @@ export default function App() {
           />
         </aside>
 
-        {/* Backdrop — tap to close sidebar on mobile */}
         {isMobile && sidebarOpen && (
           <div
             onClick={() => setSidebarOpen(false)}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 99,
-              background: 'rgba(0,0,0,0.45)',
-            }}
+            style={{ position: 'absolute', inset: 0, zIndex: 99, background: 'rgba(0,0,0,0.45)' }}
           />
         )}
       </main>

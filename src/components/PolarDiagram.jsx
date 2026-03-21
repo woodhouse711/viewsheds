@@ -4,6 +4,24 @@ const ACCENT = '#46BAB4';
 const BG = '#080c10';
 const GRID_COLOR = 'rgba(255,255,255,0.06)';
 const LABEL_COLOR = '#556070';
+const PEAK_COLOR = 'rgba(255,210,80,0.92)';
+const PEAK_ELE_COLOR = 'rgba(180,160,80,0.75)';
+
+const toRad = (d) => d * Math.PI / 180;
+
+function bearing(lat1, lng1, lat2, lng2) {
+  const φ1 = toRad(lat1), φ2 = toRad(lat2), Δλ = toRad(lng2 - lng1);
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 const CARDINAL = [
   { label: 'N', az: 0 },
@@ -12,7 +30,7 @@ const CARDINAL = [
   { label: 'W', az: 270 },
 ];
 
-export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
+export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredAz, onHoverAz }) {
   const canvasRef = useRef(null);
   const animRef = useRef(null);
   const panRef = useRef(0); // current pan offset in degrees (0-360)
@@ -204,12 +222,88 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
     // Y-axis label — "Z" slider panel covers x=0–18, so draw label at x=20 area
     // (omitted: the degree labels and slider itself make the axis self-evident)
 
+    // Peak labels — drawn after skyline so they sit on top
+    if (peaks && peaks.length > 0 && observer && viewshedResult) {
+      const obsLat = observer.lat;
+      const obsLng = observer.lng;
+      const obsElev = viewshedResult.obsElev || 0;
+      const usedX = []; // collision guard
+
+      for (const peak of peaks) {
+        const az = bearing(obsLat, obsLng, peak.lat, peak.lng);
+        const distKm = haversineKm(obsLat, obsLng, peak.lat, peak.lng);
+
+        // Canvas X for this azimuth
+        const shifted = ((az - panOffset) % 360 + 360) % 360;
+        const x = padL + (shifted / 360) * plotW;
+        if (x < padL || x > padL + plotW) continue;
+
+        // Label collision — skip if within 24px of another label
+        if (usedX.some((ox) => Math.abs(x - ox) < 24)) continue;
+
+        // Find nearest ray by azimuth
+        let nearestRay = rays[0];
+        let minDiff = 360;
+        for (const ray of rays) {
+          const diff = Math.abs(((ray.azDeg - az) + 180) % 360 - 180);
+          if (diff < minDiff) { minDiff = diff; nearestRay = ray; }
+        }
+
+        // Find sample nearest to peak distance
+        let nearestSample = null;
+        let minDD = Infinity;
+        for (const s of nearestRay.samples) {
+          const dd = Math.abs(s.distKm - distKm);
+          if (dd < minDD) { minDD = dd; nearestSample = s; }
+        }
+
+        // Only label if the peak point is visible (not occluded by nearer ridge)
+        if (!nearestSample || !nearestSample.visible) continue;
+
+        // Peak elevation angle from observer eye
+        const peakAngleDeg = Math.atan2(peak.ele - obsElev, distKm * 1000) * 180 / Math.PI;
+        const y = elevToY(peakAngleDeg);
+
+        // Skip if outside plot height
+        if (y < padT + 4 || y > padT + plotH - 2) continue;
+
+        usedX.push(x);
+
+        // Tick line from peak dot up to label
+        ctx.strokeStyle = PEAK_COLOR;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, y - 2);
+        ctx.lineTo(x, y - 11);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Peak dot
+        ctx.fillStyle = PEAK_COLOR;
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Name
+        ctx.fillStyle = PEAK_COLOR;
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(peak.name, x, y - 13);
+
+        // Elevation
+        ctx.fillStyle = PEAK_ELE_COLOR;
+        ctx.font = '8px monospace';
+        ctx.fillText(`${Math.round(peak.ele)}m`, x, y - 23);
+      }
+    }
+
     // Pan indicator (subtle)
     ctx.fillStyle = 'rgba(70,186,180,0.4)';
     ctx.font = '9px monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`pan: ${Math.round(panOffset)}°`, W - padR, padT - 3);
-  }, [viewshedResult, hoveredAz, makeAzToX, zScale]);
+  }, [viewshedResult, observer, peaks, hoveredAz, makeAzToX, zScale]);
 
   const scheduleDraw = useCallback(() => {
     cancelAnimationFrame(animRef.current);

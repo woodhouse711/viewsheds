@@ -116,6 +116,7 @@ export default function MapView({
       center: [observer.lng, observer.lat],
       zoom: 10,
       pitchWithRotate: false,
+      preserveDrawingBuffer: true, // required for html2canvas screenshot capture
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
