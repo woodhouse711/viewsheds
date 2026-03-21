@@ -113,7 +113,7 @@ export default function App() {
             worker.removeEventListener('message', handler);
             setViewshedResult(e.data.payload);
             // Fetch peaks asynchronously — non-blocking, fails silently
-            fetchPeaks(obs.lat, obs.lng, rad)
+            fetchPeaks(obs.lat, obs.lng, rad, 2500)
               .then(setPeaks)
               .catch(() => {});
             resolve();

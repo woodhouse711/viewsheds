@@ -266,7 +266,6 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
         // Canvas X for this azimuth
         const shifted = ((az - panOffset) % 360 + 360) % 360;
         const x = padL + (shifted / 360) * plotW;
-        if (x < padL || x > padL + plotW) continue;
 
         // Label collision — skip if within 24px of another label
         if (usedX.some((ox) => Math.abs(x - ox) < 24)) continue;
@@ -279,19 +278,19 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
           if (diff < minDiff) { minDiff = diff; nearestRay = ray; }
         }
 
-        // Find sample nearest to peak distance
-        let nearestSample = null;
-        let minDD = Infinity;
-        for (const s of nearestRay.samples) {
-          const dd = Math.abs(s.distKm - distKm);
-          if (dd < minDD) { minDD = dd; nearestSample = s; }
-        }
-
-        // Only label if the peak point is visible (not occluded by nearer ridge)
-        if (!nearestSample || !nearestSample.visible) continue;
-
         // Peak elevation angle from observer eye
         const peakAngleDeg = Math.atan2(peak.ele - obsElev, distKm * 1000) * 180 / Math.PI;
+
+        // Occlusion test: peak is hidden if any terrain sample closer than the peak
+        // has a higher elevation angle (it would block the line of sight).
+        let maxAngleBefore = -Infinity;
+        for (const s of nearestRay.samples) {
+          if (s.distKm < distKm - 0.5) {
+            if (s.angleDeg > maxAngleBefore) maxAngleBefore = s.angleDeg;
+          }
+        }
+        if (maxAngleBefore > peakAngleDeg + 0.3) continue; // occluded by nearer terrain
+
         const y = elevToY(peakAngleDeg);
 
         // Skip if outside plot height
