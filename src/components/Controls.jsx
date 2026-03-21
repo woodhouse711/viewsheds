@@ -132,6 +132,22 @@ function computeStats(viewshedResult, obsHeight) {
   };
 }
 
+function buildLocation(locationInfo) {
+  if (!locationInfo) return null;
+  const a = locationInfo;
+  // Settlement name: try increasingly rural fallbacks
+  const place =
+    a.city || a.town || a.village || a.hamlet || a.suburb || a.neighbourhood;
+  // Protected / managed land names
+  const managed =
+    a.national_park || a.nature_reserve || a.forest || a.protected_area ||
+    a.leisure || a.boundary;
+  const county = a.county;
+  const state   = a.state || a.province || a.region;
+  const country = a.country;
+  return { place, managed, county, state, country };
+}
+
 export default function Controls({
   showViewshed,
   onShowViewshed,
@@ -147,8 +163,12 @@ export default function Controls({
   onObsHeight,
   viewshedResult,
   computing,
+  observer,
+  locationInfo,
+  peaks,
 }) {
   const stats = computeStats(viewshedResult, obsHeight);
+  const loc = buildLocation(locationInfo);
 
   return (
     <div style={styles.panel}>
@@ -201,17 +221,65 @@ export default function Controls({
         <div style={{ color: '#46BAB4', fontSize: 11 }}>⟳ Computing…</div>
       )}
 
-      {stats && (
+      {/* Location */}
+      {observer && (
         <div style={styles.section}>
-          <div style={styles.label}>Observer</div>
-          <InfoRow label="Ground elevation" value={stats.elevation} />
-          <InfoRow label="Eye height" value={stats.observerHeight} />
-          <div style={{ ...styles.label, marginTop: 6 }}>Horizon</div>
-          <InfoRow label="Max distance" value={stats.maxHorizon} />
-          <InfoRow label="Avg distance" value={stats.avgHorizon} />
-          <InfoRow label="Visible rays" value={stats.visiblePct} />
-          <InfoRow label="Island points" value={stats.islandPoints} />
+          <div style={styles.label}>Location</div>
+          <InfoRow label="Lat" value={`${observer.lat.toFixed(5)}°`} />
+          <InfoRow label="Lng" value={`${observer.lng.toFixed(5)}°`} />
+          {loc && (
+            <>
+              {(loc.place || loc.managed) && (
+                <InfoRow
+                  label={loc.managed && !loc.place ? 'Area' : 'Place'}
+                  value={loc.place || loc.managed}
+                />
+              )}
+              {loc.managed && loc.place && (
+                <InfoRow label="Area" value={loc.managed} />
+              )}
+              {loc.county && !loc.place && !loc.managed && (
+                <InfoRow label="County" value={loc.county} />
+              )}
+              {loc.state && <InfoRow label="State/Prov" value={loc.state} />}
+              {loc.country && <InfoRow label="Country" value={loc.country} />}
+            </>
+          )}
         </div>
+      )}
+
+      {/* Peaks found in viewshed area */}
+      {peaks && peaks.length > 0 && (
+        <>
+          <div style={styles.divider} />
+          <div style={styles.section}>
+            <div style={styles.label}>Peaks ≥ 3000 m</div>
+            {peaks.slice(0, 12).map((p, i) => (
+              <InfoRow
+                key={i}
+                label={p.name}
+                value={`${Math.round(p.ele).toLocaleString()} m`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Viewshed stats */}
+      {stats && (
+        <>
+          <div style={styles.divider} />
+          <div style={styles.section}>
+            <div style={styles.label}>Observer</div>
+            <InfoRow label="Ground elevation" value={stats.elevation} />
+            <InfoRow label="Eye height" value={stats.observerHeight} />
+            <div style={{ ...styles.label, marginTop: 6 }}>Horizon</div>
+            <InfoRow label="Max distance" value={stats.maxHorizon} />
+            <InfoRow label="Avg distance" value={stats.avgHorizon} />
+            <InfoRow label="Visible rays" value={stats.visiblePct} />
+            <InfoRow label="Island points" value={stats.islandPoints} />
+          </div>
+        </>
       )}
 
       {!stats && !computing && (

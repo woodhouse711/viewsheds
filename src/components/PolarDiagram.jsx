@@ -82,17 +82,18 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
     const panOffset = panRef.current;
     const azToX = makeAzToX(padL, plotW, panOffset);
 
-    // Elevation range — center on the data midpoint so the chart always fills
-    // with actual signal. Mountains push 0° lower; deep valleys push it higher.
-    // zScale compresses the half-span so angular differences look more dramatic.
+    // Elevation range — drive the axis from the SKYLINE (ray.maxAngleDeg), not all
+    // sample angles. Occluded terrain samples can have very negative angleDeg values
+    // (far below ridges) that distort the centering and push visible peaks off the top.
     let maxElev = -Infinity;
     let minElev = Infinity;
     rays.forEach((r) => {
-      r.samples.forEach((s) => {
-        if (s.angleDeg > maxElev) maxElev = s.angleDeg;
-        if (s.angleDeg < minElev) minElev = s.angleDeg;
-      });
+      const a = r.maxAngleDeg ?? 0;
+      if (a > maxElev) maxElev = a;
+      if (a < minElev) minElev = a;
     });
+    if (maxElev === -Infinity) maxElev = 2;
+    if (minElev === Infinity) minElev = -1;
     const center = (maxElev + minElev) / 2;
     const baseHalfSpan = Math.max((maxElev - minElev) / 2 * 1.15, 1); // min 1° half-span
     const halfSpan = baseHalfSpan / zScale;
@@ -201,7 +202,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
     }
     ctx.stroke();
 
-    // Hover ray highlight
+    // Hover ray highlight + callout
     if (hoveredAz !== null && hoveredAz !== undefined) {
       const x = azToX(hoveredAz);
       ctx.strokeStyle = 'rgba(255,255,255,0.4)';
@@ -212,6 +213,31 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
       ctx.lineTo(x, padT + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      // Find nearest ray and annotate its horizon angle + distance
+      let nearRay = rays[0];
+      let minRayDiff = 360;
+      for (const ray of rays) {
+        const diff = Math.abs(((ray.azDeg - hoveredAz) + 180) % 360 - 180);
+        if (diff < minRayDiff) { minRayDiff = diff; nearRay = ray; }
+      }
+      const hAngle = nearRay.maxAngleDeg ?? 0;
+      const hDist = nearRay.horizonDist ?? 0;
+      const hy = elevToY(hAngle);
+
+      // Position label to avoid left/right edges
+      const onRight = x < padL + plotW * 0.62;
+      const lx = onRight ? x + 5 : x - 5;
+      const ly = Math.max(padT + 10, Math.min(hy - 6, padT + plotH - 24));
+      ctx.textAlign = onRight ? 'left' : 'right';
+
+      ctx.fillStyle = ACCENT;
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText(`${hAngle.toFixed(1)}°`, lx, ly);
+
+      ctx.fillStyle = LABEL_COLOR;
+      ctx.font = '9px monospace';
+      ctx.fillText(`${hDist.toFixed(1)} km`, lx, ly + 12);
     }
 
     // Axes border

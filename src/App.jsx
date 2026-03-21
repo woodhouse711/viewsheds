@@ -52,6 +52,7 @@ export default function App() {
   const [handleHovered, setHandleHovered] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [peaks, setPeaks] = useState([]);
+  const [locationInfo, setLocationInfo] = useState(null);
   const [exporting, setExporting] = useState(false);
 
   const computeRef = useRef(null);
@@ -59,10 +60,28 @@ export default function App() {
   const pendingRef = useRef(false);
   const pendingParamsRef = useRef(null);
   const mapRef = useRef(null);
+  const reverseGeoRef = useRef(null);
 
   useEffect(() => {
     if (!isMobile) setSidebarOpen(false);
   }, [isMobile]);
+
+  // Reverse-geocode observer position (debounced 800ms)
+  useEffect(() => {
+    clearTimeout(reverseGeoRef.current);
+    reverseGeoRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${observer.lat}&lon=${observer.lng}&format=json&zoom=12`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const data = await res.json();
+        setLocationInfo(data.address || null);
+      } catch {
+        setLocationInfo(null);
+      }
+    }, 800);
+  }, [observer]);
 
   const runViewshed = useCallback(async (obs, rad, height) => {
     if (pendingRef.current) {
@@ -328,6 +347,9 @@ export default function App() {
             onObsHeight={(h) => setObsHeight(h)}
             viewshedResult={viewshedResult}
             computing={computing}
+            observer={observer}
+            locationInfo={locationInfo}
+            peaks={peaks}
           />
         </aside>
 
