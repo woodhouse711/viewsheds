@@ -52,6 +52,7 @@ export default function App() {
   const computeRef = useRef(null);
   const dragRef = useRef(null);
   const pendingRef = useRef(false);
+  const pendingParamsRef = useRef(null); // queued params while a compute is in-flight
 
   // Close sidebar when switching to desktop
   useEffect(() => {
@@ -59,8 +60,14 @@ export default function App() {
   }, [isMobile]);
 
   const runViewshed = useCallback(async (obs, rad, height) => {
-    if (pendingRef.current) return;
+    if (pendingRef.current) {
+      // A computation is already running — queue the latest params and bail.
+      // When it finishes it will re-run with these params.
+      pendingParamsRef.current = { obs, rad, height };
+      return;
+    }
     pendingRef.current = true;
+    pendingParamsRef.current = null;
     setComputing(true);
     try {
       const tiles = await prefetchViewshedTiles(obs.lat, obs.lng, rad);
@@ -89,6 +96,12 @@ export default function App() {
     } finally {
       setComputing(false);
       pendingRef.current = false;
+      // If a newer location was requested while we were computing, run it now.
+      const queued = pendingParamsRef.current;
+      if (queued) {
+        pendingParamsRef.current = null;
+        runViewshed(queued.obs, queued.rad, queued.height);
+      }
     }
   }, []);
 

@@ -64,18 +64,22 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
     const panOffset = panRef.current;
     const azToX = makeAzToX(padL, plotW, panOffset);
 
-    // Elevation range — anchor 0° (horizon) at 25% from bottom.
-    // zScale zooms in on the Y axis (vertical exaggeration): higher values
-    // compress the displayed range so angular differences look more dramatic.
+    // Elevation range — center on the data midpoint so the chart always fills
+    // with actual signal. Mountains push 0° lower; deep valleys push it higher.
+    // zScale compresses the half-span so angular differences look more dramatic.
     let maxElev = -Infinity;
+    let minElev = Infinity;
     rays.forEach((r) => {
       r.samples.forEach((s) => {
         if (s.angleDeg > maxElev) maxElev = s.angleDeg;
+        if (s.angleDeg < minElev) minElev = s.angleDeg;
       });
     });
-    const baseMax = Math.max(maxElev * 1.15, 2); // natural 1:1 ceiling
-    const elevMax = baseMax / zScale;             // shrinks with higher scale → peaks look taller
-    const elevMin = -(elevMax / 3);               // keeps 0° at 25% from bottom
+    const center = (maxElev + minElev) / 2;
+    const baseHalfSpan = Math.max((maxElev - minElev) / 2 * 1.15, 1); // min 1° half-span
+    const halfSpan = baseHalfSpan / zScale;
+    const elevMax = center + halfSpan;
+    const elevMin = center - halfSpan;
 
     const elevToY = (e) => padT + plotH - ((e - elevMin) / (elevMax - elevMin)) * plotH;
 
