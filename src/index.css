@@ -1,0 +1,23 @@
+:root {
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #080c10;
+  color: #d0d4dc;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
