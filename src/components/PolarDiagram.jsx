@@ -16,7 +16,7 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
   const canvasRef = useRef(null);
   const animRef = useRef(null);
   const panRef = useRef(0); // current pan offset in degrees (0-360)
-  const [, forceRedraw] = useState(0);
+  const [zScale, setZScale] = useState(1);
 
   // Convert an azimuth degree to canvas x, accounting for pan wrap
   const makeAzToX = useCallback((padL, plotW, panOffset) => {
@@ -64,17 +64,18 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
     const panOffset = panRef.current;
     const azToX = makeAzToX(padL, plotW, panOffset);
 
-    // Elevation range — anchor 0° (horizon) at 25% from bottom so positive angles
-    // (visible peaks) always occupy 75% of chart height regardless of terrain flatness.
+    // Elevation range — anchor 0° (horizon) at 25% from bottom.
+    // zScale zooms in on the Y axis (vertical exaggeration): higher values
+    // compress the displayed range so angular differences look more dramatic.
     let maxElev = -Infinity;
     rays.forEach((r) => {
       r.samples.forEach((s) => {
         if (s.angleDeg > maxElev) maxElev = s.angleDeg;
       });
     });
-    const elevMax = Math.max(maxElev * 1.15, 2); // at least 2° of headroom above
-    // horizonFrac=0.25 → |elevMin| = elevMax/3 → 0° sits 25% from bottom
-    const elevMin = -(elevMax / 3);
+    const baseMax = Math.max(maxElev * 1.15, 2); // natural 1:1 ceiling
+    const elevMax = baseMax / zScale;             // shrinks with higher scale → peaks look taller
+    const elevMin = -(elevMax / 3);               // keeps 0° at 25% from bottom
 
     const elevToY = (e) => padT + plotH - ((e - elevMin) / (elevMax - elevMin)) * plotH;
 
@@ -82,7 +83,7 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
     ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 1;
     const elevSpan = elevMax - elevMin;
-    const elevStep = elevSpan > 20 ? 10 : elevSpan > 5 ? 5 : 1;
+    const elevStep = elevSpan > 20 ? 10 : elevSpan > 5 ? 5 : elevSpan > 1 ? 1 : 0.5;
     for (
       let e = Math.ceil(elevMin / elevStep) * elevStep;
       e <= elevMax;
@@ -96,7 +97,7 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
       ctx.fillStyle = LABEL_COLOR;
       ctx.font = '10px monospace';
       ctx.textAlign = 'right';
-      ctx.fillText(`${e.toFixed(0)}°`, padL - 4, y + 3);
+      ctx.fillText(`${e.toFixed(elevStep < 1 ? 1 : 0)}°`, padL - 4, y + 3);
     }
 
     // Zero line
@@ -131,13 +132,11 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
     ctx.fillStyle = LABEL_COLOR;
     ctx.font = '9px monospace';
     for (let step = 0; step < 8; step++) {
-      // label the azimuth that appears at each 45° screen position
       const screenAz = (panOffset + step * 45) % 360;
       const x = padL + (step / 8) * plotW;
       ctx.textAlign = 'center';
       ctx.fillText(`${Math.round(screenAz)}°`, x, padT + plotH + 28);
     }
-    // right edge label
     ctx.textAlign = 'center';
     ctx.fillText(`${Math.round(panOffset)}°`, W - padR, padT + plotH + 28);
 
@@ -174,7 +173,6 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
-    // close: connect last ray back to first (wrap)
     if (sortedRays.length > 0) {
       const first = sortedRays[0];
       ctx.lineTo(padL + plotW, elevToY(first.maxAngleDeg ?? 0));
@@ -214,7 +212,7 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
     ctx.font = '9px monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`pan: ${Math.round(panOffset)}°`, W - padR, padT - 3);
-  }, [viewshedResult, hoveredAz, makeAzToX]);
+  }, [viewshedResult, hoveredAz, makeAzToX, zScale]);
 
   const scheduleDraw = useCallback(() => {
     cancelAnimationFrame(animRef.current);
@@ -280,12 +278,52 @@ export default function PolarDiagram({ viewshedResult, hoveredAz, onHoverAz }) {
   }, [onHoverAz]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100%', height: '100%', display: 'block', cursor: 'ew-resize' }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: BG }}>
+      <canvas
+        ref={canvasRef}
+        style={{ flex: 1, width: '100%', display: 'block', cursor: 'ew-resize', minHeight: 0 }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      />
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '4px 10px 5px 48px',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+      }}>
+        <span style={{ color: LABEL_COLOR, fontSize: 10, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+          Z ×{zScale % 1 === 0 ? zScale : zScale.toFixed(1)}
+        </span>
+        <input
+          type="range"
+          min={1}
+          max={10}
+          step={0.5}
+          value={zScale}
+          onChange={(e) => setZScale(Number(e.target.value))}
+          style={{ flex: 1, accentColor: ACCENT, cursor: 'pointer', margin: 0 }}
+        />
+        <button
+          onClick={() => setZScale(1)}
+          disabled={zScale === 1}
+          style={{
+            background: 'none',
+            border: `1px solid ${zScale === 1 ? 'rgba(255,255,255,0.07)' : 'rgba(70,186,180,0.4)'}`,
+            color: zScale === 1 ? '#556070' : ACCENT,
+            fontFamily: 'monospace',
+            fontSize: 10,
+            padding: '2px 6px',
+            borderRadius: 3,
+            cursor: zScale === 1 ? 'default' : 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          1:1
+        </button>
+      </div>
+    </div>
   );
 }
+
