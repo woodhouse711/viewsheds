@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import MapView from './components/MapView';
 import PolarDiagram from './components/PolarDiagram';
 import Controls from './components/Controls';
-import { prefetchViewshedTiles, getCachedTileData } from './lib/terrain';
+import { prefetchViewshedTiles } from './lib/terrain';
 
 // Default observer: Mount Tamalpais, CA — great viewshed demo location
 const DEFAULT_OBSERVER = { lat: 37.9235, lng: -122.5965 };
@@ -58,11 +58,16 @@ const styles = {
     position: 'relative',
     minHeight: 0,
   },
-  diagramContainer: {
-    height: 180,
+  resizeHandle: {
+    height: 5,
+    background: 'rgba(255,255,255,0.04)',
     borderTop: '1px solid rgba(255,255,255,0.07)',
-    background: '#080c10',
+    cursor: 'ns-resize',
     flexShrink: 0,
+    userSelect: 'none',
+  },
+  resizeHandleHover: {
+    background: 'rgba(70,186,180,0.25)',
   },
   sidebar: {
     width: 240,
@@ -99,8 +104,11 @@ export default function App() {
   const [viewshedResult, setViewshedResult] = useState(null);
   const [computing, setComputing] = useState(false);
   const [hoveredAz, setHoveredAz] = useState(null);
+  const [diagramHeight, setDiagramHeight] = useState(180);
+  const [handleHovered, setHandleHovered] = useState(false);
 
   const computeRef = useRef(null);
+  const dragRef = useRef(null);
   const pendingRef = useRef(false);
 
   const runViewshed = useCallback(async (obs, rad, height) => {
@@ -109,9 +117,7 @@ export default function App() {
     setComputing(true);
 
     try {
-      await prefetchViewshedTiles(obs.lat, obs.lng, rad);
-
-      const tiles = getCachedTileData();
+      const tiles = await prefetchViewshedTiles(obs.lat, obs.lng, rad);
       const worker = getWorker();
 
       worker.postMessage({ type: 'SET_TILES', payload: { tiles } });
@@ -172,6 +178,24 @@ export default function App() {
     [runViewshed]
   );
 
+  const handleResizeMouseDown = useCallback((e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = diagramHeight;
+    const onMove = (me) => {
+      const delta = startY - me.clientY; // drag up = increase height
+      setDiagramHeight(Math.max(80, Math.min(600, startH + delta)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      dragRef.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    dragRef.current = { onMove, onUp };
+  }, [diagramHeight]);
+
   const handleObserverChange = useCallback(
     (obs) => {
       setObserver(obs);
@@ -213,7 +237,16 @@ export default function App() {
               showViewshed={showViewshed}
             />
           </div>
-          <div style={styles.diagramContainer}>
+          <div
+            style={{
+              ...styles.resizeHandle,
+              ...(handleHovered ? styles.resizeHandleHover : {}),
+            }}
+            onMouseDown={handleResizeMouseDown}
+            onMouseEnter={() => setHandleHovered(true)}
+            onMouseLeave={() => setHandleHovered(false)}
+          />
+          <div style={{ height: diagramHeight, background: '#080c10', flexShrink: 0 }}>
             <PolarDiagram
               viewshedResult={viewshedResult}
               hoveredAz={hoveredAz}

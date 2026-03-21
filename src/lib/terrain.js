@@ -3,7 +3,7 @@
 const TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const TILE_ZOOM = 12;
 const TILE_SIZE = 256;
-const CACHE_MAX = 50;
+const CACHE_MAX = 200;
 
 // LRU cache using a Map (insertion-order iteration)
 class LRUCache {
@@ -108,18 +108,21 @@ async function fetchTile(z, x, y) {
   return promise;
 }
 
-// Pre-fetch all tiles needed to cover a bounding box
+// Pre-fetch all tiles needed to cover a bounding box; returns tile map keyed by tileKey
 export async function prefetchTiles(bounds) {
   const { north, south, east, west } = bounds;
   const tl = latLngToTile(north, west, TILE_ZOOM);
   const br = latLngToTile(south, east, TILE_ZOOM);
-  const fetches = [];
+  const pairs = [];
   for (let x = tl.x; x <= br.x; x++) {
     for (let y = tl.y; y <= br.y; y++) {
-      fetches.push(fetchTile(TILE_ZOOM, x, y));
+      pairs.push({ z: TILE_ZOOM, x, y, key: tileKey(TILE_ZOOM, x, y) });
     }
   }
-  return Promise.all(fetches);
+  const results = await Promise.all(pairs.map((p) => fetchTile(p.z, p.x, p.y)));
+  const tiles = {};
+  pairs.forEach((p, i) => { tiles[p.key] = results[i]; });
+  return tiles;
 }
 
 // Get elevation (meters) at a lat/lng. Returns 0 if tile not loaded.
@@ -150,7 +153,7 @@ export function getCachedTileData() {
   return tiles;
 }
 
-// Prefetch tiles covering the viewshed radius around a point
+// Prefetch tiles covering the viewshed radius around a point; returns tile map for worker
 export async function prefetchViewshedTiles(lat, lng, radiusKm) {
   const KM_PER_DEG_LAT = 111.32;
   const KM_PER_DEG_LNG = KM_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
@@ -163,5 +166,6 @@ export async function prefetchViewshedTiles(lat, lng, radiusKm) {
     west: lng - dLng,
   });
 }
+// kept for backward compatibility
 
 export { TILE_ZOOM, TILE_SIZE, latLngToTile, tileKey };
