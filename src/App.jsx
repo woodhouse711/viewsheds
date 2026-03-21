@@ -171,8 +171,19 @@ export default function App() {
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
-      const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(document.body, {
+      // Load html2canvas from CDN at click-time — avoids Vite import analysis
+      // and means no local npm install is required.
+      if (!window._html2canvas) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+        window._html2canvas = window.html2canvas;
+      }
+      const canvas = await window._html2canvas(document.body, {
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#080c10',
