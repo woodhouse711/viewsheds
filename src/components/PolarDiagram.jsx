@@ -176,12 +176,18 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
     ctx.fillText(`${Math.round(panOffset)}°`, W - padR, padT + plotH + 28);
 
     // Plot all samples
-    const maxDist = Math.max(...rays.map((r) => r.horizonDist || 0));
+    // maxDist must be the full computation radius (farthest sample), NOT the horizon
+    // distance. Normalizing by horizonDist makes alpha go negative for samples beyond
+    // the nearest blocked ray, rendering them fully transparent.
+    let maxDist = 0;
+    rays.forEach((r) => { if (r.samples.length > 0) { const d = r.samples[r.samples.length - 1].distKm; if (d > maxDist) maxDist = d; } });
+    if (maxDist === 0) maxDist = 1;
+
     rays.forEach((ray) => {
       ray.samples.forEach((s) => {
         const x = azToX(ray.azDeg);
         const y = elevToY(s.angleDeg);
-        const alpha = 0.15 + 0.5 * (1 - s.distKm / (maxDist || 1));
+        const alpha = Math.max(0, 0.15 + 0.5 * (1 - s.distKm / maxDist));
         if (s.isIsland) {
           ctx.fillStyle = `rgba(70,230,220,${alpha})`;
         } else if (s.visible) {
