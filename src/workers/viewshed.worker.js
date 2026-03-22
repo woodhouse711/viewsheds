@@ -48,7 +48,17 @@ function computeViewshed({ obsLat, obsLng, obsHeight, radiusKm, numAzimuths, til
   const obsElev = getElev(obsLat, obsLng, zoom) + obsHeight;
   const DEG_PER_KM_LAT = 1 / 111.32;
   const DEG_PER_KM_LNG = DEG_PER_KM_LAT / Math.cos((obsLat * Math.PI) / 180);
-  const stepKm = 0.05; // 50m steps
+  // Variable step size: finer sampling near the observer where steep terrain
+  // is underrepresented by fixed-interval steps (each 50m step at 1km changes
+  // elevation angle ~3×more than the same step at 10km).
+  // Terrain tile resolution at zoom 12 is ~25m/px, so 12.5m = 2 samples/px.
+  const BASE_STEP = 0.05; // 50m beyond 10km
+  function stepAt(d) {
+    if (d < 4) return 0.0125;  // 12.5m — 4× within 4km
+    if (d < 10) return 0.025;  // 25m   — 2× within 10km
+    return BASE_STEP;           // 50m   — normal beyond 10km
+  }
+
   const rays = [];
 
   for (let i = 0; i < numAzimuths; i++) {
@@ -62,7 +72,10 @@ function computeViewshed({ obsLat, obsLng, obsHeight, radiusKm, numAzimuths, til
     let horizonIdx = -1;
     let everOccluded = false;
 
-    for (let d = stepKm; d <= radiusKm; d += stepKm) {
+    let d = 0;
+    while (d < radiusKm) {
+      d += stepAt(d);
+      if (d > radiusKm) d = radiusKm;
       const sLat = obsLat + dLat * d;
       const sLng = obsLng + dLng * d;
       const elev = getElev(sLat, sLng, zoom);
@@ -93,7 +106,7 @@ function computeViewshed({ obsLat, obsLng, obsHeight, radiusKm, numAzimuths, til
         visible,
         isIsland,
       });
-    }
+    } // end while
 
     rays.push({
       azDeg,
