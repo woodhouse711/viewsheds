@@ -159,6 +159,10 @@ export default function Controls({
   onFillOpacity,
   showTopo,
   onShowTopo,
+  showHover,
+  onShowHover,
+  useCurvature,
+  onUseCurvature,
   radius,
   onRadius,
   obsHeight,
@@ -194,6 +198,8 @@ export default function Controls({
           </div>
         )}
         <Toggle label="Topo / contours" value={showTopo} onChange={onShowTopo} />
+        <Toggle label="Hover highlight" value={showHover} onChange={onShowHover} />
+        <Toggle label="Earth curvature" value={useCurvature} onChange={onUseCurvature} />
       </div>
 
       <div style={styles.divider} />

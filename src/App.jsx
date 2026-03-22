@@ -6,7 +6,7 @@ import LocationSearch from './components/LocationSearch';
 import { prefetchViewshedTiles } from './lib/terrain';
 import { fetchPeaks } from './lib/peaks';
 
-const DEFAULT_OBSERVER = { lat: 47.6677, lng: -122.3829 };
+const DEFAULT_OBSERVER = { lat: 47.7459, lng: -121.0882 }; // Stevens Pass summit, WA
 const DEFAULT_RADIUS = 30;
 const DEFAULT_OBS_HEIGHT = 2;
 const NUM_AZIMUTHS = 720;
@@ -72,6 +72,8 @@ export default function App() {
   const [computing, setComputing] = useState(false);
   // hoverTarget links the map and diagram: { az, mapLat, mapLng, diagramAngleDeg }
   const [hoverTarget, setHoverTarget] = useState(null);
+  const [showHover, setShowHover] = useState(true);
+  const [useCurvature, setUseCurvature] = useState(true);
   const [diagramHeight, setDiagramHeight] = useState(180);
   const [handleHovered, setHandleHovered] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -189,17 +191,28 @@ export default function App() {
     if (showViewshed) scheduleCompute(obs, radius, obsHeight);
   }, [showViewshed, radius, obsHeight, scheduleCompute]);
 
-  // Hover from diagram: az is the hovered azimuth; look up horizon point for map target
-  const handleDiagramHover = useCallback((az) => {
+  // Hover from diagram: az + elevDeg (from mouse Y) → find terrain sample at that angle → map point
+  const handleDiagramHover = useCallback((az, elevDeg) => {
     if (az === null || !viewshedResult?.rays) { setHoverTarget(null); return; }
     const ray = _nearestRay(viewshedResult.rays, az);
-    setHoverTarget({ az, mapLat: ray.horizonLat, mapLng: ray.horizonLng, diagramAngleDeg: ray.maxAngleDeg });
+    // Find sample whose angleDeg is closest to the hovered elevation angle
+    let bestSample = ray.samples[0], bestDiff = Infinity;
+    for (const s of ray.samples) {
+      const d = Math.abs(s.angleDeg - elevDeg);
+      if (d < bestDiff) { bestDiff = d; bestSample = s; }
+    }
+    setHoverTarget({
+      az,
+      mapLat: bestSample?.lat ?? ray.horizonLat,
+      mapLng: bestSample?.lng ?? ray.horizonLng,
+      diagramAngleDeg: elevDeg, // exact mouse position, not snapped to skyline
+    });
   }, [viewshedResult]);
 
   // Hover from map: latlng is the hovered position; find its angle in the diagram
   const handleMapHover = useCallback((latlng) => {
     cancelAnimationFrame(mapHoverRafRef.current);
-    if (!latlng || !viewshedResult?.rays) { setHoverTarget(null); return; }
+    if (!latlng || !viewshedResult?.rays || !showHover) { setHoverTarget(null); return; }
     mapHoverRafRef.current = requestAnimationFrame(() => {
       const az = _bearing(observer.lat, observer.lng, latlng.lat, latlng.lng);
       const distKm = _haversineKm(observer.lat, observer.lng, latlng.lat, latlng.lng);
@@ -403,8 +416,9 @@ export default function App() {
               viewshedResult={viewshedResult}
               observer={observer}
               peaks={peaks}
-              hoverTarget={hoverTarget}
-              onHoverAz={handleDiagramHover}
+              hoverTarget={showHover ? hoverTarget : null}
+              onHoverAz={showHover ? handleDiagramHover : null}
+              useCurvature={useCurvature}
             />
           </div>
         </div>
@@ -432,6 +446,10 @@ export default function App() {
             onFillOpacity={setFillOpacity}
             showTopo={showTopo}
             onShowTopo={setShowTopo}
+            showHover={showHover}
+            onShowHover={(v) => { setShowHover(v); if (!v) setHoverTarget(null); }}
+            useCurvature={useCurvature}
+            onUseCurvature={setUseCurvature}
             radius={radius}
             onRadius={(r) => setRadius(r)}
             obsHeight={obsHeight}

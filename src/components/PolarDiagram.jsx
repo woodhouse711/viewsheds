@@ -33,10 +33,11 @@ const CARDINAL = [
   { label: 'W', az: 270 },
 ];
 
-export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTarget, onHoverAz }) {
+export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTarget, onHoverAz, useCurvature = true }) {
   const canvasRef = useRef(null);
   const animRef = useRef(null);
   const panRef = useRef(0); // current pan offset in degrees (0-360)
+  const elevRangeRef = useRef({ elevMin: -1, elevMax: 2 }); // updated each draw for Y→angle inversion
   const [zScale, setZScale] = useState(1);
 
   // Convert an azimuth degree to canvas x, accounting for pan wrap
@@ -111,6 +112,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
     const elevMin = center - halfSpan;
 
     const elevToY = (e) => padT + plotH - ((e - elevMin) / (elevMax - elevMin)) * plotH;
+    elevRangeRef.current = { elevMin, elevMax }; // allow handleMouseMove to invert Y→angle
 
     // Grid lines — elevation
     ctx.strokeStyle = GRID_COLOR;
@@ -260,7 +262,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
       const hAngle = nearRay.maxAngleDeg ?? 0;
       const hDist = nearRay.horizonDist ?? 0;
       const obsElev = viewshedResult.obsElev ?? 0;
-      const drop = (hDist * hDist) / (2 * EARTH_R * REFRAC) * 1000;
+      const drop = useCurvature ? (hDist * hDist) / (2 * EARTH_R * REFRAC) * 1000 : 0;
       const horizonElevM = Math.round(obsElev + hDist * 1000 * Math.tan(hAngle * Math.PI / 180) + drop);
 
       const onRight = x < padL + plotW * 0.62;
@@ -309,9 +311,8 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
           if (diff < minDiff) { minDiff = diff; nearestRay = ray; }
         }
 
-        // Peak elevation angle from observer eye — apply earth curvature correction
-        // (same formula used in the worker: effectiveElev = ele - drop)
-        const peakDrop = (distKm * distKm) / (2 * EARTH_R * REFRAC) * 1000;
+        // Peak elevation angle from observer eye — optionally apply earth curvature correction
+        const peakDrop = useCurvature ? (distKm * distKm) / (2 * EARTH_R * REFRAC) * 1000 : 0;
         const peakAngleDeg = Math.atan2((peak.ele - peakDrop) - obsElev, distKm * 1000) * 180 / Math.PI;
 
         // Occlusion test: peak is hidden if any terrain sample closer than the peak
@@ -365,7 +366,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
     ctx.font = '9px monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`pan: ${Math.round(panOffset)}°`, W - padR, padT - 3);
-  }, [viewshedResult, observer, peaks, hoverTarget, makeAzToX, zScale]);
+  }, [viewshedResult, observer, peaks, hoverTarget, makeAzToX, zScale, useCurvature]);
 
   const scheduleDraw = useCallback(() => {
     cancelAnimationFrame(animRef.current);
@@ -415,19 +416,23 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
       if (!viewshedResult || dragState.current) return;
       const canvas = canvasRef.current;
       const rect = canvas.getBoundingClientRect();
-      const padL = 48;
-      const padR = 16;
+      const padL = 48, padR = 16, padT = 16, padB = 32;
       const plotW = rect.width - padL - padR;
+      const plotH = rect.height - padT - padB;
       const x = e.clientX - rect.left - padL;
+      const y = e.clientY - rect.top - padT;
       const shifted = Math.max(0, Math.min(360, (x / plotW) * 360));
       const az = (panRef.current + shifted) % 360;
-      onHoverAz && onHoverAz(az);
+      // Invert elevToY: angle = elevMax - (y/plotH) * (elevMax - elevMin)
+      const { elevMin, elevMax } = elevRangeRef.current;
+      const elevDeg = elevMax - Math.max(0, Math.min(1, y / plotH)) * (elevMax - elevMin);
+      onHoverAz && onHoverAz(az, elevDeg);
     },
     [viewshedResult, onHoverAz]
   );
 
   const handleMouseLeave = useCallback(() => {
-    onHoverAz && onHoverAz(null);
+    onHoverAz && onHoverAz(null, null);
   }, [onHoverAz]);
 
   return (
