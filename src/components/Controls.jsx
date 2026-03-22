@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 const styles = {
   panel: {
@@ -76,10 +76,43 @@ function Toggle({ label, value, onChange }) {
 }
 
 function SliderRow({ label, min, max, step, value, onChange, unit }) {
+  const [inputVal, setInputVal] = useState(String(value));
+  // Keep input in sync when slider drives value externally
+  const prevValue = useRef(value);
+  if (prevValue.current !== value) {
+    prevValue.current = value;
+    setInputVal(String(value));
+  }
   return (
     <div style={styles.section}>
-      <div style={styles.label}>
-        {label} <span style={styles.value}>{value}{unit}</span>
+      <div style={{ ...styles.label, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{label}</span>
+        <input
+          type="text"
+          value={inputVal}
+          onChange={(e) => {
+            setInputVal(e.target.value);
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v) && v >= min && v <= max) onChange(v);
+          }}
+          onBlur={() => {
+            const v = parseFloat(inputVal);
+            if (isNaN(v) || v < min || v > max) { setInputVal(String(value)); }
+            else { onChange(v); setInputVal(String(v)); }
+          }}
+          style={{
+            width: 44,
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 3,
+            color: '#46BAB4',
+            fontFamily: 'monospace',
+            fontSize: 10,
+            textAlign: 'right',
+            padding: '1px 4px',
+            outline: 'none',
+          }}
+        />
       </div>
       <input
         type="range"

@@ -39,6 +39,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
   const panRef = useRef(0); // current pan offset in degrees (0-360)
   const elevRangeRef = useRef({ elevMin: -1, elevMax: 2 }); // updated each draw for Y→angle inversion
   const [zScale, setZScale] = useState(1);
+  const [zInputVal, setZInputVal] = useState('1');
 
   // Convert an azimuth degree to canvas x, accounting for pan wrap
   const makeAzToX = useCallback((padL, plotW, panOffset) => {
@@ -99,7 +100,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
     if (maxElev === -Infinity) maxElev = 2;
     if (minElev === Infinity) minElev = -1;
     const center = (maxElev + minElev) / 2;
-    const dataHalfSpan = Math.max((maxElev - minElev) / 2 * 1.15, 1);
+    const dataHalfSpan = Math.max((maxElev - minElev) / 2 * 1.15, 8);
 
     // Fixed-scale axis: calibrate px/degree from data at the reference diagram height
     // (180px total → 132px plotH). As the window grows taller, the same px/deg scale
@@ -445,7 +446,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
     <div style={{ position: 'relative', width: '100%', height: '100%', background: BG }}>
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', height: '100%', display: 'block', cursor: 'ew-resize' }}
+        style={{ width: '100%', height: '100%', display: 'block', cursor: onHoverAz ? 'crosshair' : 'ew-resize' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
@@ -463,9 +464,32 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
         gap: 2,
         pointerEvents: 'auto',
       }}>
-        <span style={{ color: LABEL_COLOR, fontSize: 8, fontFamily: 'monospace', lineHeight: 1 }}>
-          ×{zScale % 1 === 0 ? zScale : zScale.toFixed(1)}
-        </span>
+        <input
+          type="text"
+          value={zInputVal}
+          onChange={(e) => {
+            setZInputVal(e.target.value);
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v) && v >= 0.2 && v <= 10) { setZScale(v); }
+          }}
+          onBlur={() => {
+            const v = parseFloat(zInputVal);
+            if (isNaN(v) || v < 0.2 || v > 10) { setZInputVal(String(zScale)); }
+            else { setZScale(v); setZInputVal(String(v)); }
+          }}
+          style={{
+            width: 16,
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 2,
+            color: ACCENT,
+            fontFamily: 'monospace',
+            fontSize: 7,
+            textAlign: 'center',
+            padding: '1px 0',
+            outline: 'none',
+          }}
+        />
         <input
           type="range"
           orient="vertical"
@@ -473,7 +497,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
           max={10}
           step={0.1}
           value={zScale}
-          onChange={(e) => setZScale(Number(e.target.value))}
+          onChange={(e) => { const v = Number(e.target.value); setZScale(v); setZInputVal(String(v % 1 === 0 ? v : v.toFixed(1))); }}
           style={{
             flex: 1,
             writingMode: 'vertical-lr',
@@ -484,7 +508,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTar
           }}
         />
         <button
-          onClick={() => setZScale(1)}
+          onClick={() => { setZScale(1); setZInputVal('1'); }}
           disabled={zScale === 1}
           style={{
             background: 'none',

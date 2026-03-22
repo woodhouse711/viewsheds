@@ -72,7 +72,7 @@ export default function App() {
   const [computing, setComputing] = useState(false);
   // hoverTarget links the map and diagram: { az, mapLat, mapLng, diagramAngleDeg }
   const [hoverTarget, setHoverTarget] = useState(null);
-  const [showHover, setShowHover] = useState(true);
+  const [showHover, setShowHover] = useState(false);
   const [useCurvature, setUseCurvature] = useState(true);
   const [diagramHeight, setDiagramHeight] = useState(180);
   const [handleHovered, setHandleHovered] = useState(false);
