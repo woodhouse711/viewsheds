@@ -6,6 +6,9 @@ const GRID_COLOR = 'rgba(255,255,255,0.06)';
 const LABEL_COLOR = '#556070';
 const PEAK_COLOR = 'rgba(255,210,80,0.92)';
 const PEAK_ELE_COLOR = 'rgba(180,160,80,0.75)';
+const LIME = '#A3FF2F';
+const EARTH_R = 6371;   // km
+const REFRAC  = 1.15;   // atmospheric refraction factor
 
 const toRad = (d) => d * Math.PI / 180;
 
@@ -30,7 +33,7 @@ const CARDINAL = [
   { label: 'W', az: 270 },
 ];
 
-export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredAz, onHoverAz }) {
+export default function PolarDiagram({ viewshedResult, observer, peaks, hoverTarget, onHoverAz }) {
   const canvasRef = useRef(null);
   const animRef = useRef(null);
   const panRef = useRef(0); // current pan offset in degrees (0-360)
@@ -209,10 +212,15 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
     }
     ctx.stroke();
 
-    // Hover ray highlight + callout
-    if (hoveredAz !== null && hoveredAz !== undefined) {
-      const x = azToX(hoveredAz);
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    // Hover highlight: azimuth line + concentric-circle target + callout
+    if (hoverTarget) {
+      const az = hoverTarget.az;
+      const angleDeg = hoverTarget.diagramAngleDeg ?? 0;
+      const x = azToX(az);
+      const ty = elevToY(angleDeg);
+
+      // Dashed azimuth guide line
+      ctx.strokeStyle = `${LIME}66`;
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
@@ -221,34 +229,50 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Find nearest ray and annotate its horizon angle + distance
-      let nearRay = rays[0];
-      let minRayDiff = 360;
+      // Concentric circles target
+      const clampedTy = Math.max(padT + 2, Math.min(padT + plotH - 2, ty));
+      // outer ring
+      ctx.beginPath();
+      ctx.arc(x, clampedTy, 14, 0, Math.PI * 2);
+      ctx.strokeStyle = LIME;
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      // inner ring
+      ctx.beginPath();
+      ctx.arc(x, clampedTy, 8, 0, Math.PI * 2);
+      ctx.strokeStyle = LIME;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // dot
+      ctx.beginPath();
+      ctx.arc(x, clampedTy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = LIME;
+      ctx.fill();
+
+      // Callout: horizon elevation (with curvature) + distance
+      let nearRay = rays[0], minRayDiff = 360;
       for (const ray of rays) {
-        const diff = Math.abs(((ray.azDeg - hoveredAz) + 180) % 360 - 180);
+        const diff = Math.abs(((ray.azDeg - az) + 180) % 360 - 180);
         if (diff < minRayDiff) { minRayDiff = diff; nearRay = ray; }
       }
       const hAngle = nearRay.maxAngleDeg ?? 0;
       const hDist = nearRay.horizonDist ?? 0;
-      const hy = elevToY(hAngle);
-
-      // Compute terrain elevation at the horizon point
       const obsElev = viewshedResult.obsElev ?? 0;
-      const horizonElevM = Math.round(obsElev + hDist * 1000 * Math.tan(hAngle * Math.PI / 180));
+      const drop = (hDist * hDist) / (2 * EARTH_R * REFRAC) * 1000;
+      const horizonElevM = Math.round(obsElev + hDist * 1000 * Math.tan(hAngle * Math.PI / 180) + drop);
 
-      // Position label to avoid left/right edges
       const onRight = x < padL + plotW * 0.62;
-      const lx = onRight ? x + 5 : x - 5;
-      const ly = Math.max(padT + 10, Math.min(hy - 6, padT + plotH - 24));
+      const lx = onRight ? x + 18 : x - 18;
+      const calloutY = Math.max(padT + 10, Math.min(clampedTy - 6, padT + plotH - 24));
       ctx.textAlign = onRight ? 'left' : 'right';
-
-      ctx.fillStyle = ACCENT;
+      ctx.fillStyle = LIME;
       ctx.font = 'bold 10px monospace';
-      ctx.fillText(`${horizonElevM.toLocaleString()} m`, lx, ly);
-
+      ctx.fillText(`${horizonElevM.toLocaleString()} m`, lx, calloutY);
       ctx.fillStyle = LABEL_COLOR;
       ctx.font = '9px monospace';
-      ctx.fillText(`${hDist.toFixed(1)} km`, lx, ly + 12);
+      ctx.fillText(`${hDist.toFixed(1)} km`, lx, calloutY + 12);
     }
 
     // Axes border
@@ -285,8 +309,10 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
           if (diff < minDiff) { minDiff = diff; nearestRay = ray; }
         }
 
-        // Peak elevation angle from observer eye
-        const peakAngleDeg = Math.atan2(peak.ele - obsElev, distKm * 1000) * 180 / Math.PI;
+        // Peak elevation angle from observer eye — apply earth curvature correction
+        // (same formula used in the worker: effectiveElev = ele - drop)
+        const peakDrop = (distKm * distKm) / (2 * EARTH_R * REFRAC) * 1000;
+        const peakAngleDeg = Math.atan2((peak.ele - peakDrop) - obsElev, distKm * 1000) * 180 / Math.PI;
 
         // Occlusion test: peak is hidden if any terrain sample closer than the peak
         // has a higher elevation angle (it would block the line of sight).
@@ -339,7 +365,7 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
     ctx.font = '9px monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`pan: ${Math.round(panOffset)}°`, W - padR, padT - 3);
-  }, [viewshedResult, observer, peaks, hoveredAz, makeAzToX, zScale]);
+  }, [viewshedResult, observer, peaks, hoverTarget, makeAzToX, zScale]);
 
   const scheduleDraw = useCallback(() => {
     cancelAnimationFrame(animRef.current);

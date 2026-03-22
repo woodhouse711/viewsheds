@@ -80,6 +80,8 @@ function buildObserverGeoJSON(lat, lng) {
   };
 }
 
+const LIME = '#A3FF2F';
+
 export default function MapView({
   observer,
   onObserverChange,
@@ -89,12 +91,17 @@ export default function MapView({
   showViewshed,
   showTopo,
   onMapReady,
+  onMapHover,
+  hoverTarget,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const isDraggingRef = useRef(false);
   const debounceRef = useRef(null);
+  // Stable ref so the one-time mousemove listener always calls the latest callback
+  const onMapHoverRef = useRef(onMapHover);
+  onMapHoverRef.current = onMapHover;
 
   const notifyObserver = useCallback(
     (lat, lng) => {
@@ -203,6 +210,36 @@ export default function MapView({
         },
       });
 
+      // Hover target — three concentric circle layers (outer ring, inner ring, dot)
+      map.addSource('hover-target-src', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'hover-target-ring-2',
+        type: 'circle',
+        source: 'hover-target-src',
+        paint: { 'circle-radius': 18, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-width': 1.5, 'circle-stroke-color': LIME, 'circle-stroke-opacity': 0.55 },
+      });
+      map.addLayer({
+        id: 'hover-target-ring-1',
+        type: 'circle',
+        source: 'hover-target-src',
+        paint: { 'circle-radius': 10, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-width': 2, 'circle-stroke-color': LIME },
+      });
+      map.addLayer({
+        id: 'hover-target-dot',
+        type: 'circle',
+        source: 'hover-target-src',
+        paint: { 'circle-radius': 4, 'circle-color': LIME },
+      });
+
+      // Fire map-hover events (throttled by rAF in App)
+      map.on('mousemove', (e) => {
+        if (!isDraggingRef.current) onMapHoverRef.current?.(e.lngLat);
+      });
+      map.getCanvas().addEventListener('mouseleave', () => onMapHoverRef.current?.(null));
+
       mapRef.current = map;
       onMapReady && onMapReady(map);
     });
@@ -287,6 +324,17 @@ export default function MapView({
     if (!map || !map.getLayer(FILL_LAYER)) return;
     map.setPaintProperty(FILL_LAYER, 'fill-opacity', fillOpacity);
   }, [fillOpacity]);
+
+  // Hover target marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getSource('hover-target-src')) return;
+    map.getSource('hover-target-src').setData(
+      hoverTarget
+        ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [hoverTarget.mapLng, hoverTarget.mapLat] }, properties: {} }] }
+        : { type: 'FeatureCollection', features: [] }
+    );
+  }, [hoverTarget]);
 
   // Toggle topo overlay
   useEffect(() => {

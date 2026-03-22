@@ -12,6 +12,29 @@ const DEFAULT_OBS_HEIGHT = 2;
 const NUM_AZIMUTHS = 720;
 const TILE_ZOOM = 12;
 
+// Geodetic helpers used for map-hover → azimuth conversion
+const _toRad = (d) => d * Math.PI / 180;
+function _bearing(lat1, lng1, lat2, lng2) {
+  const φ1 = _toRad(lat1), φ2 = _toRad(lat2), Δλ = _toRad(lng2 - lng1);
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+function _haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = _toRad(lat2 - lat1), dLng = _toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(_toRad(lat1)) * Math.cos(_toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function _nearestRay(rays, az) {
+  let best = rays[0], bestDiff = 360;
+  for (const r of rays) {
+    const d = Math.abs(((r.azDeg - az) + 180) % 360 - 180);
+    if (d < bestDiff) { bestDiff = d; best = r; }
+  }
+  return best;
+}
+
 const MOBILE_BP = '(max-width: 768px)';
 
 function useIsMobile() {
@@ -47,10 +70,12 @@ export default function App() {
   const [showTopo, setShowTopo] = useState(false);
   const [viewshedResult, setViewshedResult] = useState(null);
   const [computing, setComputing] = useState(false);
-  const [hoveredAz, setHoveredAz] = useState(null);
+  // hoverTarget links the map and diagram: { az, mapLat, mapLng, diagramAngleDeg }
+  const [hoverTarget, setHoverTarget] = useState(null);
   const [diagramHeight, setDiagramHeight] = useState(180);
   const [handleHovered, setHandleHovered] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
   const [peaks, setPeaks] = useState([]);
   const [locationInfo, setLocationInfo] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -61,6 +86,7 @@ export default function App() {
   const pendingParamsRef = useRef(null);
   const mapRef = useRef(null);
   const reverseGeoRef = useRef(null);
+  const mapHoverRafRef = useRef(null);
 
   useEffect(() => {
     if (!isMobile) setSidebarOpen(false);
@@ -163,6 +189,40 @@ export default function App() {
     if (showViewshed) scheduleCompute(obs, radius, obsHeight);
   }, [showViewshed, radius, obsHeight, scheduleCompute]);
 
+  // Hover from diagram: az is the hovered azimuth; look up horizon point for map target
+  const handleDiagramHover = useCallback((az) => {
+    if (az === null || !viewshedResult?.rays) { setHoverTarget(null); return; }
+    const ray = _nearestRay(viewshedResult.rays, az);
+    setHoverTarget({ az, mapLat: ray.horizonLat, mapLng: ray.horizonLng, diagramAngleDeg: ray.maxAngleDeg });
+  }, [viewshedResult]);
+
+  // Hover from map: latlng is the hovered position; find its angle in the diagram
+  const handleMapHover = useCallback((latlng) => {
+    cancelAnimationFrame(mapHoverRafRef.current);
+    if (!latlng || !viewshedResult?.rays) { setHoverTarget(null); return; }
+    mapHoverRafRef.current = requestAnimationFrame(() => {
+      const az = _bearing(observer.lat, observer.lng, latlng.lat, latlng.lng);
+      const distKm = _haversineKm(observer.lat, observer.lng, latlng.lat, latlng.lng);
+      const ray = _nearestRay(viewshedResult.rays, az);
+      let bestSample = ray.samples[0], bestDiff = Infinity;
+      for (const s of ray.samples) {
+        const d = Math.abs(s.distKm - distKm);
+        if (d < bestDiff) { bestDiff = d; bestSample = s; }
+      }
+      setHoverTarget({ az, mapLat: latlng.lat, mapLng: latlng.lng, diagramAngleDeg: bestSample?.angleDeg ?? ray.maxAngleDeg });
+    });
+  }, [observer, viewshedResult]);
+
+  // Sidebar resize (desktop only) — drag handle on left edge
+  const handleSidebarResize = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX, startW = sidebarWidth;
+    const onMove = (me) => setSidebarWidth(Math.max(190, Math.min(500, startW + (startX - me.clientX))));
+    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [sidebarWidth]);
+
   const handleLocationSelect = useCallback((coords) => {
     handleObserverChange(coords);
     mapRef.current?.flyTo({ center: [coords.lng, coords.lat], zoom: 10 });
@@ -230,7 +290,9 @@ export default function App() {
         transition: 'transform 0.22s ease',
       }
     : {
-        width: 240,
+        position: 'relative',
+        width: sidebarWidth,
+        minWidth: sidebarWidth,
         borderLeft: '1px solid rgba(255,255,255,0.07)',
         padding: 12,
         overflowY: 'auto',
@@ -313,6 +375,8 @@ export default function App() {
               showViewshed={showViewshed}
               showTopo={showTopo}
               onMapReady={(m) => { mapRef.current = m; }}
+              onMapHover={handleMapHover}
+              hoverTarget={hoverTarget}
             />
           </div>
 
@@ -339,14 +403,26 @@ export default function App() {
               viewshedResult={viewshedResult}
               observer={observer}
               peaks={peaks}
-              hoveredAz={hoveredAz}
-              onHoverAz={setHoveredAz}
+              hoverTarget={hoverTarget}
+              onHoverAz={handleDiagramHover}
             />
           </div>
         </div>
 
         {/* Sidebar */}
         <aside style={sidebarStyle}>
+          {/* Resize handle — desktop only */}
+          {!isMobile && (
+            <div
+              onMouseDown={handleSidebarResize}
+              style={{
+                position: 'absolute', left: 0, top: 0, bottom: 0, width: 5,
+                cursor: 'ew-resize', zIndex: 5,
+                background: 'rgba(255,255,255,0.03)',
+                borderLeft: '1px solid rgba(255,255,255,0.07)',
+              }}
+            />
+          )}
           <Controls
             showViewshed={showViewshed}
             onShowViewshed={setShowViewshed}
