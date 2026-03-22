@@ -255,7 +255,7 @@ export default function Controls({
         <>
           <div style={styles.divider} />
           <div style={styles.section}>
-            <div style={styles.label}>Peaks ≥ 3000 m</div>
+            <div style={styles.label}>Peaks ≥ 2500 m</div>
             {peaks.slice(0, 12).map((p, i) => (
               <InfoRow
                 key={i}

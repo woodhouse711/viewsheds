@@ -9,7 +9,7 @@ import { fetchPeaks } from './lib/peaks';
 const DEFAULT_OBSERVER = { lat: 47.6677, lng: -122.3829 };
 const DEFAULT_RADIUS = 30;
 const DEFAULT_OBS_HEIGHT = 2;
-const NUM_AZIMUTHS = 360;
+const NUM_AZIMUTHS = 720;
 const TILE_ZOOM = 12;
 
 const MOBILE_BP = '(max-width: 768px)';
@@ -239,7 +239,7 @@ export default function App() {
       };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#080c10', display: 'flex', flexDirection: 'column', fontFamily: 'monospace', color: '#d0d4dc', overflow: 'hidden' }}>
+    <div style={{ width: '100vw', height: '100dvh', background: '#080c10', display: 'flex', flexDirection: 'column', fontFamily: 'monospace', color: '#d0d4dc', overflow: 'hidden' }}>
 
       {/* Header */}
       <header style={{ padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(8,12,16,0.95)', zIndex: 10, flexShrink: 0 }}>
@@ -248,30 +248,34 @@ export default function App() {
         {/* Location search */}
         <LocationSearch onSelect={handleLocationSelect} />
 
-        {/* Coords display */}
-        <span style={{ fontSize: 10, color: '#556070', flexShrink: 0, whiteSpace: 'nowrap' }}>
-          {observer.lat.toFixed(4)}°, {observer.lng.toFixed(4)}°
-        </span>
+        {/* Coords display — hidden on mobile (visible in sidebar) */}
+        {!isMobile && (
+          <span style={{ fontSize: 10, color: '#556070', flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {observer.lat.toFixed(4)}°, {observer.lng.toFixed(4)}°
+          </span>
+        )}
 
-        {/* Export button */}
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          title="Save screenshot (lat/lng filename)"
-          style={{
-            background: 'none',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 4,
-            color: exporting ? '#556070' : '#d0d4dc',
-            fontFamily: 'monospace',
-            fontSize: 12,
-            padding: '3px 7px',
-            cursor: exporting ? 'default' : 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          {exporting ? '…' : '⬇ JPG'}
-        </button>
+        {/* Export button — hidden on mobile */}
+        {!isMobile && (
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            title="Save screenshot (lat/lng filename)"
+            style={{
+              background: 'none',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 4,
+              color: exporting ? '#556070' : '#d0d4dc',
+              fontFamily: 'monospace',
+              fontSize: 12,
+              padding: '3px 7px',
+              cursor: exporting ? 'default' : 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            {exporting ? '…' : '⬇ JPG'}
+          </button>
+        )}
 
         {isMobile && (
           <button

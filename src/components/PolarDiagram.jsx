@@ -95,8 +95,15 @@ export default function PolarDiagram({ viewshedResult, observer, peaks, hoveredA
     if (maxElev === -Infinity) maxElev = 2;
     if (minElev === Infinity) minElev = -1;
     const center = (maxElev + minElev) / 2;
-    const baseHalfSpan = Math.max((maxElev - minElev) / 2 * 1.15, 1); // min 1° half-span
-    const halfSpan = baseHalfSpan / zScale;
+    const dataHalfSpan = Math.max((maxElev - minElev) / 2 * 1.15, 1);
+
+    // Fixed-scale axis: calibrate px/degree from data at the reference diagram height
+    // (180px total → 132px plotH). As the window grows taller, the same px/deg scale
+    // is kept and more of the angle range is revealed — not the same range stretched.
+    // zScale zooms in (>1) or out (<1) from that baseline.
+    const REF_PLOT_H = 132;
+    const pxPerDeg = REF_PLOT_H / (2 * dataHalfSpan);
+    const halfSpan = plotH / (2 * pxPerDeg * zScale);
     const elevMax = center + halfSpan;
     const elevMin = center - halfSpan;
 
